@@ -1,10 +1,33 @@
 program SnakeGame;
 uses crt;
 const
-  SIZE		    = 20;
+  FIELD_WIDTH	    = 30;
+  FIELD_HEIGHT	    = 20;
   DELAY_DURATION    = 100;
-  SNAKE_BODY_SYMBOL = 'M';
+  SNAKE_BODY_SYMBOL = 'O';
   APPLE_SYMBOL	    = '*';
+  WALL_SYMBOL	    = '#';
+
+type
+  point	    = record
+		x, y : integer;
+	      end;
+  itemptr   = ^item;
+  item	    = record
+		data : point;
+		next : itemptr;
+	      end;
+  snake	    = record
+		dx, dy : integer;
+		body   : itemptr;
+	      end;
+  apple	    = point;
+  gameState = record
+		gameOver  : boolean;
+		hasTicked : boolean;
+		snake	  : snake;
+		apple	  : apple;
+	      end;
 
 procedure GetKey(var code : integer);
 var
@@ -22,53 +45,52 @@ begin
   end
 end;
 
-type
-  point	  = record
-	      x, y : integer;
-	    end;   
-  apple	  = point;
-  itemptr = ^item;
-  item	  = record
-	      data : point;
-	      next : itemptr;
-	    end;   
-  snake	  = record
-	      dx, dy : integer;
-	      body   : itemptr;
-	    end;
-
-procedure DrawBorder(width, height : integer);
-var
-  i : integer;
+procedure DrawBorder();
+var i : integer;
 begin
-  for i := 1 to width do
-    begin
-      GotoXY(i, 1);
-      write('━');
-      GotoXY(i, height);
-      write('━');
-    end;
-  for i := 1 to height do
-    begin
-      GotoXY(1, i);
-      write('|');
-      GotoXY(width, i);
-      write('|');
-    end;
-  GotoXY(1, 1);
-end;
-
-procedure CreateApple(var a : apple);
-begin
-  a.x := random(SIZE - 3) + 2;
-  a.y := random(SIZE - 3) + 2;
-end;
-
-procedure ShowApple(a : apple);
-begin
-  GotoXY(a.x, a.y);
-  write(APPLE_SYMBOL);
+  for i := 1 to FIELD_WIDTH do
+  begin
+    GotoXY(i, 1);
+    write(WALL_SYMBOL);
+    GotoXY(i, FIELD_HEIGHT);
+    write(WALL_SYMBOL);
+  end;
+  for i := 1 to FIELD_HEIGHT do
+  begin
+    GotoXY(1, i);
+    write(WALL_SYMBOL);
+    GotoXY(FIELD_WIDTH, i);
+    write(WALL_SYMBOL);
+  end;
   GotoXY(1, 1)
+end;
+
+procedure PrependHead(var head, body : itemptr);
+begin
+  head^.next := body;
+  body := head
+end;
+
+procedure RemoveTail(var body : itemptr);
+begin
+  if (body^.next = nil) then
+    body := nil
+  else
+    RemoveTail(body^.next)
+end;
+
+procedure RenderItem(i : item);
+begin
+  GotoXY(i.data.x, i.data.y);
+  write(SNAKE_BODY_SYMBOL);
+  GotoXY(1, 1)
+end;
+
+procedure RenderSnake(body : itemptr);
+begin
+  if (body = nil) then exit;
+  RenderItem(body^);
+  RenderSnake(body^.next)
 end;
 
 procedure HideItem(i : item);
@@ -78,58 +100,44 @@ begin
   GotoXY(1, 1)
 end;
 
-procedure ShowItem(i : item);
-begin
-  GotoXY(i.data.x, i.data.y);
-  write(SNAKE_BODY_SYMBOL);
-  GotoXY(1, 1)
-end;
-
 procedure HideSnake(body : itemptr);
 begin
-  if not (body = nil) then
-    begin
-      HideItem(body^);
-      HideSnake(body^.next)
-    end;
+  if (body = nil) then exit;
+  HideItem(body^);
+  HideSnake(body^.next)
 end;
 
-procedure ShowSnake(body : itemptr);
+procedure CreateApple(var state	: gameState);
 begin
-  if not (body = nil) then
-    begin
-      ShowItem(body^);
-      ShowSnake(body^.next)
-    end;
+  state.apple.x := random(FIELD_WIDTH - 2) + 2;
+  state.apple.y := random(FIELD_HEIGHT - 2) + 2;
 end;
 
-procedure HideHead(var s : snake);
+procedure RenderApple(apple : apple);
 begin
-  GotoXY(s.body^.data.x, s.body^.data.y);
-  write(' ');
+  GotoXY(apple.x, apple.y);
+  write(APPLE_SYMBOL);
   GotoXY(1, 1)
 end;
 
-procedure RemoveTail(var b : itemptr);
+procedure Render(state : gameState);
 begin
-  if (b^.next = nil) then b := nil
-  else RemoveTail(b^.next)
+  RenderSnake(state.snake.body);
+  RenderApple(state.apple)
 end;
 
-procedure PrependHead(var h, b : itemptr);
+procedure SetDirection(var state  : gameState;
+			   dx, dy : integer);
 begin
-  h^.next := b;
-  b := h;
-end;
-
-procedure Grow(var s : snake; p : point);
-var
-  newHead : itemptr;
-begin
-  new(newHead);
-  newHead^.data.x := p.x;
-  newHead^.data.y := p.y;
-  PrependHead(newHead, s.body)
+  if state.gameOver then exit;
+  if (state.snake.dx = -dx) and (state.snake.dy = dy) then exit;
+  if (state.snake.dy = -dy) and (state.snake.dx = dx) then exit;
+  if state.hasTicked then
+  begin
+    state.snake.dx := dx;
+    state.snake.dy := dy;
+  end;
+  state.hasTicked := false
 end;
 
 function Contains(body : itemptr; coord : point) : boolean;
@@ -138,118 +146,106 @@ begin
   if (body^.data.x = coord.x) and (body^.data.y = coord.y) then
     Contains := true
   else
-  Contains := Contains(body^.next, coord)
+    Contains := Contains(body^.next, coord)
 end;
 
-function HasCollided(
-s :			 snake;
-size :			 integer;
-newCoord :		 point
-			 ) : boolean;
+function HasCollided(state    : gameState;
+		     newCoord : point) : boolean;
 begin
-  if (s.body^.data.x <= 1) or
-    (s.body^.data.x >= size) or
-    (s.body^.data.y <= 1) or
-    (s.body^.data.y >= size)
+  if (newCoord.x <= 1) or
+    (newCoord.x >= FIELD_WIDTH) or
+    (newCoord.y <= 1) or
+    (newCoord.y >= FIELD_HEIGHT)
   then
     HasCollided := true
   else
-    HasCollided := Contains(s.body, newCoord)
+    HasCollided := Contains(state.snake.body, newCoord)
 end;
 
-procedure SetDirection(var s : snake;
-		       var hasTicked: boolean;
-			   dx, dy : integer);
+procedure Grow(var state : gameState);
+var newHead : itemptr;
 begin
-  if not hasTicked then exit;
-  if (s.dx = -dx) and (s.dy = dy) then exit;
-  if (s.dy = -dy) and (s.dx = dx) then exit;
-  s.dx := dx;
-  s.dy := dy;
-  hasTicked := false
+  new(newHead);
+  newHead^.data.x := state.apple.x;
+  newHead^.data.y := state.apple.y;
+  PrependHead(newHead, state.snake.body)
 end;
 
-procedure Tick(var s	     : snake;
-	       var a	     : apple;
-	       var hasTicked : boolean;
-	       var gameOver  : boolean);
+procedure Tick(var state : gameState);
 var
-  newX, newY  : integer;
-  newHead     : itemptr;
-  newCoord    : point;
+  newCoord : point;
+  newHead  : itemptr;
   collided : boolean;
 begin
-  HideSnake(s.body);
+  HideSnake(state.snake.body);
 
-  newCoord.x := s.body^.data.x + s.dx;
-  newCoord.y := s.body^.data.y + s.dy;
-  collided := HasCollided(s, SIZE, newCoord);
+  newCoord.x := state.snake.body^.data.x + state.snake.dx;
+  newCoord.y := state.snake.body^.data.y + state.snake.dy;
 
+  if state.gameOver then
+  begin
+    SetDirection(state, 0, 0);
+  end;
+
+  collided := HasCollided(state, newCoord);
   if collided then
   begin
-    setDirection(s, hasTicked, 0, 0);
-    gameOver := true;
-    ShowSnake(s.body);
-    ShowApple(a);
+    state.gameOver := true;
+    Render(state);
     exit
   end;
 
-  if (newCoord.x = a.x) and (newCoord.y = a.y) then
-    begin
-      Grow(s, a);
-      CreateApple(a)
-    end
+  if (newCoord.x = state.apple.x) and (newCoord.y = state.apple.y) then
+  begin
+    Grow(state);
+    CreateApple(state)
+  end
   else
     begin
       new(newHead);
       newHead^.data := newCoord;
-      PrependHead(newHead, s.body);
-      RemoveTail(s.body)
+      PrependHead(newHead, state.snake.body);
+      RemoveTail(state.snake.body);
     end;
-
-  ShowSnake(s.body);
-  ShowApple(a);
-  hasTicked := true;
+  Render(state)
 end;
 
-procedure Initialize(size : integer);
-begin
-  DrawBorder(size, size)
-end;
-
-var
-  s	    : snake;
-  a	    : apple;
-  c	    : integer;
-  hasTicked, gameOver : boolean;
+procedure Initialize(var state : gameState);
 begin
   randomize;
   clrscr;
-  Initialize(SIZE);
-  gameOver := false;
-  hasTicked := false;
-  new(s.body);
-  s.body^.data.x := SIZE div 2;
-  s.body^.data.y := SIZE div 2;
-  s.dx := 1;
-  s.dy := 0;
-  ShowSnake(s.body);
-  CreateApple(a);
+  DrawBorder();
+  state.gameOver := false;
+  new(state.snake.body);
+  state.snake.body^.data.x := FIELD_WIDTH div 2;
+  state.snake.body^.data.y := FIELD_HEIGHT div 2;
+  state.snake.dx := 1;
+  state.snake.dy := 0;
+  CreateApple(state);
+  Render(state)
+end;
+
+var
+  state : gameState;
+  c	: integer;
+begin
+  Initialize(state);
   while true do
   begin
-    if (not KeyPressed) and (not gameOver) then
+    if not KeyPressed then
     begin
-      Tick(s, a, hasTicked, gameOver);
+      Tick(state);
+      state.hasTicked := true;
       delay(DELAY_DURATION);
       continue
     end;
     GetKey(c);
+    if not state.hasTicked then continue;
     case c of
-      -75 : setDirection(s, hasTicked, -1, 0);
-      -77 : setDirection(s, hasTicked, 1, 0);
-      -72 : setDirection(s, hasTicked, 0, -1);
-      -80 : setDirection(s, hasTicked, 0, 1);
-      { 32  : setDirection(s, hasTicked, 0, 0); }
+      -75 : SetDirection(state, -1, 0);
+      -77 : SetDirection(state, 1, 0);
+      -72 : SetDirection(state, 0, -1);
+      -80 : SetDirection(state, 0, 1);
       27 : break
     end;
   end;
