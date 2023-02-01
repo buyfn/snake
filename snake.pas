@@ -4,9 +4,9 @@ const
   FIELD_WIDTH	    = 30;
   FIELD_HEIGHT	    = 20;
   DELAY_DURATION    = 100;
-  SNAKE_BODY_SYMBOL = 'O';
+  SNAKE_BODY_SYMBOL = ' ';
   APPLE_SYMBOL	    = '*';
-  WALL_SYMBOL	    = '#';
+  WALL_SYMBOL	    = ' ';
 
 type
   point	    = record
@@ -48,6 +48,7 @@ end;
 procedure DrawBorder();
 var i : integer;
 begin
+  TextBackground(LightGray);
   for i := 1 to FIELD_WIDTH do
   begin
     GotoXY(i, 1);
@@ -82,7 +83,9 @@ end;
 procedure RenderItem(i : item);
 begin
   GotoXY(i.data.x, i.data.y);
+  TextBackground(Green);
   write(SNAKE_BODY_SYMBOL);
+  TextBackground(Black);
   GotoXY(1, 1)
 end;
 
@@ -116,6 +119,7 @@ end;
 procedure RenderApple(apple : apple);
 begin
   GotoXY(apple.x, apple.y);
+  TextColor(Yellow);
   write(APPLE_SYMBOL);
   GotoXY(1, 1)
 end;
