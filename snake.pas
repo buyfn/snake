@@ -1,5 +1,5 @@
 program SnakeGame;
-uses crt;
+uses crt, pointlist;
 const
   FIELD_WIDTH	    = 30;
   FIELD_HEIGHT	    = 20;
@@ -9,17 +9,9 @@ const
   WALL_SYMBOL	    = '#';
 
 type
-  point	    = record
-		x, y : integer;
-	      end;
-  itemptr   = ^item;
-  item	    = record
-		data : point;
-		next : itemptr;
-	      end;
   snake	    = record
 		dx, dy : integer;
-		body   : itemptr;
+		body   : ListItemPtr;
 	      end;
   apple	    = point;
   gameState = record
@@ -65,42 +57,28 @@ begin
   GotoXY(1, 1)
 end;
 
-procedure PrependHead(var head, body : itemptr);
-begin
-  head^.next := body;
-  body := head
-end;
-
-procedure RemoveTail(var body : itemptr);
-begin
-  if (body^.next = nil) then
-    body := nil
-  else
-    RemoveTail(body^.next)
-end;
-
-procedure RenderItem(i : item);
+procedure RenderItem(i : ListItem);
 begin
   GotoXY(i.data.x, i.data.y);
   write(SNAKE_BODY_SYMBOL);
   GotoXY(1, 1)
 end;
 
-procedure RenderSnake(body : itemptr);
+procedure RenderSnake(body : ListItemPtr);
 begin
   if (body = nil) then exit;
   RenderItem(body^);
   RenderSnake(body^.next)
 end;
 
-procedure HideItem(i : item);
+procedure HideItem(i : ListItem);
 begin
   GotoXY(i.data.x, i.data.y);
   write(' ');
   GotoXY(1, 1)
 end;
 
-procedure HideSnake(body : itemptr);
+procedure HideSnake(body : ListItemPtr);
 begin
   if (body = nil) then exit;
   HideItem(body^);
@@ -140,15 +118,6 @@ begin
   state.hasTicked := false
 end;
 
-function Contains(body : itemptr; coord : point) : boolean;
-begin
-  if (body = nil) then Contains := false else
-  if (body^.data.x = coord.x) and (body^.data.y = coord.y) then
-    Contains := true
-  else
-    Contains := Contains(body^.next, coord)
-end;
-
 function HasCollided(state    : gameState;
 		     newCoord : point) : boolean;
 begin
@@ -163,7 +132,7 @@ begin
 end;
 
 procedure Grow(var state : gameState);
-var newHead : itemptr;
+var newHead : ListItemPtr;
 begin
   new(newHead);
   newHead^.data.x := state.apple.x;
@@ -174,7 +143,7 @@ end;
 procedure Tick(var state : gameState);
 var
   newCoord : point;
-  newHead  : itemptr;
+  newHead  : ListItemPtr;
   collided : boolean;
 begin
   HideSnake(state.snake.body);
@@ -205,7 +174,7 @@ begin
       new(newHead);
       newHead^.data := newCoord;
       PrependHead(newHead, state.snake.body);
-      RemoveTail(state.snake.body);
+      RemoveLast(state.snake.body);
     end;
   Render(state)
 end;
